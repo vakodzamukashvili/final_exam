@@ -1,0 +1,97 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2821
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 \
+bash\
+\
+openssl genpkey -algorithm RSA -out private.pem -pkeyopt rsa_keygen_bits:2048\
+openssl rsa -pubout -in private.pem -out public.pem\
+\
+\
+\
+\
+with open("alice_message.txt", "w") as f:\
+    f.write("This is a top-secret message from Alice to Bob.")\
+\
+\
+from Crypto.Cipher import AES\
+from Crypto.Random import get_random_bytes\
+\
+aes_key = get_random_bytes(32)  # 256-bit AES key\
+iv = get_random_bytes(16)       # 128-bit IV\
+\
+from Crypto.Util.Padding import pad\
+\
+with open("alice_message.txt", "rb") as f:\
+    data = f.read()\
+\
+cipher = AES.new(aes_key, AES.MODE_CBC, iv)\
+ciphertext = cipher.encrypt(pad(data, AES.block_size))\
+\
+with open("encrypted_file.bin", "wb") as f:\
+    f.write(iv + ciphertext)  # Store IV + encrypted content\
+\
+\
+from cryptography.hazmat.primitives import serialization, hashes\
+from cryptography.hazmat.primitives.asymmetric import padding\
+\
+with open("public.pem", "rb") as f:\
+    public_key = serialization.load_pem_public_key(f.read())\
+\
+encrypted_aes_key = public_key.encrypt(\
+    aes_key,\
+    padding.OAEP(\
+        mgf=padding.MGF1(algorithm=hashes.SHA256()),\
+        algorithm=hashes.SHA256(),\
+        label=None\
+    )\
+)\
+\
+with open("aes_key_encrypted.bin", "wb") as f:\
+    f.write(encrypted_aes_key)\
+\
+\
+with open("private.pem", "rb") as f:\
+    private_key = serialization.load_pem_private_key(f.read(), password=None)\
+\
+with open("aes_key_encrypted.bin", "rb") as f:\
+    encrypted_key = f.read()\
+\
+decrypted_aes_key = private_key.decrypt(\
+    encrypted_key,\
+    padding.OAEP(\
+        mgf=padding.MGF1(algorithm=hashes.SHA256()),\
+        algorithm=hashes.SHA256(),\
+        label=None\
+    )\
+)\
+\
+\
+from Crypto.Util.Padding import unpad\
+\
+with open("encrypted_file.bin", "rb") as f:\
+    iv = f.read(16)\
+    ciphertext = f.read()\
+\
+cipher = AES.new(decrypted_aes_key, AES.MODE_CBC, iv)\
+decrypted_data = unpad(cipher.decrypt(ciphertext), AES.block_size)\
+\
+with open("decrypted_message.txt", "wb") as f:\
+    f.write(decrypted_data)\
+\
+\
+import hashlib\
+\
+def sha256_file(filepath):\
+    with open(filepath, "rb") as f:\
+        return hashlib.sha256(f.read()).hexdigest()\
+\
+original_hash = sha256_file("alice_message.txt")\
+decrypted_hash = sha256_file("decrypted_message.txt")\
+\
+print("Hashes match:", original_hash == decrypted_hash)\
+}
